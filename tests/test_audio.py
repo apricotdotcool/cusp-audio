@@ -149,6 +149,13 @@ class TestAudioCaptureAsync:
         capture = AudioCapture(CuspConfig(), loop)
         mock_stream = MagicMock()
         monkeypatch.setattr("cusp.audio.resolve_device", lambda cfg: None)
+        mock_default = MagicMock()
+        mock_default.device = (0, 0)
+        monkeypatch.setattr("cusp.audio.sd.default", mock_default)
+        monkeypatch.setattr(
+            "cusp.audio.sd.query_devices",
+            lambda *args, **kwargs: FAKE_DEVICES[0],
+        )
         monkeypatch.setattr(
             "cusp.audio.sd.InputStream",
             lambda **kwargs: mock_stream,
@@ -161,6 +168,13 @@ class TestAudioCaptureAsync:
         capture = AudioCapture(CuspConfig(), loop)
         mock_stream = MagicMock()
         monkeypatch.setattr("cusp.audio.resolve_device", lambda cfg: None)
+        mock_default = MagicMock()
+        mock_default.device = (0, 0)
+        monkeypatch.setattr("cusp.audio.sd.default", mock_default)
+        monkeypatch.setattr(
+            "cusp.audio.sd.query_devices",
+            lambda *args, **kwargs: FAKE_DEVICES[0],
+        )
         monkeypatch.setattr(
             "cusp.audio.sd.InputStream",
             lambda **kwargs: mock_stream,
