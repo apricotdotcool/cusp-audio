@@ -1,6 +1,6 @@
 [project]
 name = "cusp-audio"
-version = "0.1.0"
+version = "0.1.1"
 description = "Stream audio from audio input to an AirPlay receiver"
 readme = "README.md"
 license = "MIT"
@@ -24,6 +24,7 @@ homepage = "https://github.com/apricotdotcool/cusp-audio"
 
 [project.scripts]
 cusp = "cusp.cli:main"
+cusp-audio = "cusp.cli:main"
 
 [dependency-groups]
 dev = [
