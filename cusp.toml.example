@@ -1,0 +1,33 @@
+[audio]
+# Audio input device: a name (substring match), an index number from
+# `cusp devices`, or "system" to capture system audio output (Linux only).
+device = "USB Audio"
+# sample_rate and channels are inferred from the selected device.
+# Uncomment to override:
+# sample_rate = 48000
+# channels = 2
+blocksize = 1024
+
+[airplay]
+# AirPlay receiver name (substring match)
+# Run `cusp devices` to see available receivers
+target = "Living Room"
+# password = "secret"
+
+[behavior]
+# Reconnect automatically if the AirPlay connection drops mid-stream.
+auto_reconnect = true
+reconnect_delay = 5.0
+
+# Connect-on-demand: the AirPlay session is opened only when input
+# audio exceeds `silence_threshold` (RMS, 0.0–1.0), and torn down
+# after `idle_timeout` seconds of continuous silence.
+silence_threshold = 0.01
+idle_timeout = 30.0
+
+# How often (seconds) to re-scan for the AirPlay target while idle,
+# so a receiver that changed IP is picked up before the next session.
+target_refresh_interval = 300.0
+
+log_level = "INFO"
+# log_file = "/var/log/cusp.log"
