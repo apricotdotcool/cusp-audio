@@ -23,6 +23,8 @@ jobs:
           python-version: "3.14"
 
       - name: Set version from tag
+        # Only pyproject.toml needs patching: the runtime __version__ is
+        # resolved from installed package metadata (see src/cusp/__init__.py).
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           sed -i "s/^version = .*/version = \"${VERSION}\"/" pyproject.toml
