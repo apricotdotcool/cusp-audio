@@ -25,8 +25,8 @@ def devices(timeout: float) -> None:
 
 
 async def _list_devices(timeout: float) -> None:
-    from cusp.audio import list_input_devices
     from cusp.airplay import discover_devices
+    from cusp.audio import list_input_devices
 
     click.echo("Audio input devices:")
     click.echo("-" * 40)
@@ -79,8 +79,18 @@ async def _pair_device(name: str) -> None:
     type=click.Path(exists=True),
     help="Config file path.",
 )
-@click.option("--sample-rate", default=None, type=int, help="Sample rate in Hz (default: from device).")
-@click.option("--channels", default=None, type=int, help="Number of channels (default: from device).")
+@click.option(
+    "--sample-rate",
+    default=None,
+    type=int,
+    help="Sample rate in Hz (default: from device).",
+)
+@click.option(
+    "--channels",
+    default=None,
+    type=int,
+    help="Number of channels (default: from device).",
+)
 @click.option("--blocksize", default=None, type=int, help="Audio block size in frames.")
 @click.option("--log-level", default=None, help="Log level (DEBUG/INFO/WARNING/ERROR).")
 @click.option("--log-file", default=None, help="Log to file instead of stderr.")
@@ -120,7 +130,8 @@ def stream(
 
     if not config.airplay_target:
         click.echo(
-            "Error: No AirPlay target specified. Use -t or set [airplay] target in config.",
+            "Error: No AirPlay target specified. "
+            "Use -t or set [airplay] target in config.",
             err=True,
         )
         sys.exit(1)

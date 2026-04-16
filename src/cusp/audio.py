@@ -148,7 +148,9 @@ class AudioCapture:
         device = resolve_device(self._config)
 
         # Infer channels and sample rate from the device when not configured.
-        dev_info = sd.query_devices(device if device is not None else sd.default.device[0])
+        dev_info = sd.query_devices(
+            device if device is not None else sd.default.device[0]
+        )
         if self._config.channels is None:
             self._config.channels = dev_info["max_input_channels"]
         if self._config.sample_rate is None:

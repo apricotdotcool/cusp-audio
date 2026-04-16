@@ -16,10 +16,19 @@ class TestWavHeader:
     def test_structure(self):
         header = _wav_header(48000, 2, 16)
         (
-            riff, file_size, wave,
-            fmt, fmt_size, audio_fmt, channels, sample_rate,
-            byte_rate, block_align, bits_per_sample,
-            data, data_size,
+            riff,
+            file_size,
+            wave,
+            fmt,
+            fmt_size,
+            audio_fmt,
+            channels,
+            sample_rate,
+            byte_rate,
+            block_align,
+            bits_per_sample,
+            data,
+            data_size,
         ) = struct.unpack("<4sI4s4sIHHIIHH4sI", header)
 
         assert riff == b"RIFF"
@@ -50,10 +59,10 @@ class TestWavHeader:
         # indices: 0=RIFF 1=filesize 2=WAVE 3=fmt 4=fmtsize
         #   5=audiofmt 6=channels 7=samplerate 8=byterate
         #   9=blockalign 10=bitspersample 11=data 12=datasize
-        assert parsed[6] == 1       # channels
-        assert parsed[7] == 44100   # sample_rate
+        assert parsed[6] == 1  # channels
+        assert parsed[7] == 44100  # sample_rate
         assert parsed[8] == 44100 * 1 * 2  # byte_rate
-        assert parsed[9] == 1 * 2   # block_align
+        assert parsed[9] == 1 * 2  # block_align
 
 
 class TestStreamingSession:

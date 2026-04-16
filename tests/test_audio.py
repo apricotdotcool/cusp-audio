@@ -14,12 +14,31 @@ from cusp.audio import (
 )
 from cusp.config import CuspConfig
 
-
 FAKE_DEVICES = [
-    {"name": "Built-in Microphone", "max_input_channels": 2, "max_output_channels": 0, "default_samplerate": 44100.0},
-    {"name": "USB Audio Device", "max_input_channels": 2, "max_output_channels": 0, "default_samplerate": 48000.0},
-    {"name": "HDMI Output", "max_input_channels": 0, "max_output_channels": 8, "default_samplerate": 48000.0},
-    {"name": "USB Audio Pro", "max_input_channels": 4, "max_output_channels": 2, "default_samplerate": 96000.0},
+    {
+        "name": "Built-in Microphone",
+        "max_input_channels": 2,
+        "max_output_channels": 0,
+        "default_samplerate": 44100.0,
+    },
+    {
+        "name": "USB Audio Device",
+        "max_input_channels": 2,
+        "max_output_channels": 0,
+        "default_samplerate": 48000.0,
+    },
+    {
+        "name": "HDMI Output",
+        "max_input_channels": 0,
+        "max_output_channels": 8,
+        "default_samplerate": 48000.0,
+    },
+    {
+        "name": "USB Audio Pro",
+        "max_input_channels": 4,
+        "max_output_channels": 2,
+        "default_samplerate": 96000.0,
+    },
 ]
 
 
