@@ -26,8 +26,9 @@ def _load_credentials() -> dict[str, dict[str, str]]:
 
 
 def _save_credentials(creds: dict[str, dict[str, str]]) -> None:
-    CREDENTIALS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CREDENTIALS_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     CREDENTIALS_PATH.write_text(json.dumps(creds, indent=2))
+    CREDENTIALS_PATH.chmod(0o600)
 
 
 async def discover_devices(timeout: float = 5.0) -> list[dict]:
