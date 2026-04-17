@@ -21,6 +21,7 @@ dependencies = [
 
 [project.urls]
 homepage = "https://github.com/apricotdotcool/cusp-audio"
+Changelog = "https://github.com/apricotdotcool/cusp-audio/blob/main/CHANGELOG.md"
 
 [project.scripts]
 cusp = "cusp.cli:main"
