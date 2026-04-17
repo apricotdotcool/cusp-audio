@@ -1,5 +1,10 @@
 # cusp
 
+[![CI](https://github.com/apricotdotcool/cusp-audio/actions/workflows/tests.yml/badge.svg)](https://github.com/apricotdotcool/cusp-audio/actions/workflows/tests.yml)
+[![PyPI version](https://img.shields.io/pypi/v/cusp-audio.svg)](https://pypi.org/project/cusp-audio/)
+[![Python versions](https://img.shields.io/pypi/pyversions/cusp-audio.svg)](https://pypi.org/project/cusp-audio/)
+[![License](https://img.shields.io/pypi/l/cusp-audio.svg)](https://pypi.org/project/cusp-audio/)
+
 Stream audio from a microphone, USB input, or system audio to an AirPlay receiver. Designed to run headlessly on a Raspberry Pi, but should work on any Linux or macOS computer.
 
 Can be run as an always-on service which will connect to an AirPlay receiver when audio starts and disconnect when it stops. Hook up a turntable and use a HomePod as its speaker.
