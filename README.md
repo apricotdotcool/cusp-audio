@@ -209,3 +209,7 @@ By default cusp infers the channel count from the selected device, so mono devic
 ### Tailscale and `--accept-routes`
 
 If you run Tailscale on your devices as I do, `--accept-routes` can break AirPlay discovery and streaming. When enabled, Tailscale installs routes that cause traffic to the AirPlay receiver to be sent back out over the Tailscale interface toward the receiver's Tailscale IP instead of reaching it directly on the LAN. The receiver ends up unreachable, discovery is flaky, and streams fail to start. If you hit this, either disable `--accept-routes` on the machine running cusp, or exclude your LAN subnet from the accepted routes.
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, test, and lint instructions.
