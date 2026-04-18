@@ -148,7 +148,50 @@ Config file search order: `--config` flag, then `./cusp.toml`, then `~/.config/c
 
 ### Systemd service
 
-Create `/etc/systemd/system/cusp.service`:
+First, confirm where `cusp` is installed — the unit's `ExecStart` must point at the actual binary path:
+
+```bash
+which cusp
+```
+
+Installs via `uv tool install` or `pip install --user` land in `~/.local/bin/cusp`, not `/usr/local/bin/cusp`. Use whatever path `which` reports in the `ExecStart=` lines below.
+
+#### User service (recommended)
+
+Running cusp as a `--user` service avoids root, matches how `uv tool install` / `pip install --user` place the binary, and is the simplest setup on a Raspberry Pi.
+
+```bash
+uv tool install cusp-audio
+```
+
+Create `~/.config/systemd/user/cusp.service`:
+
+```ini
+[Unit]
+Description=Cusp AirPlay Audio Streamer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/cusp stream --config %h/.config/cusp/cusp.toml
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+```
+
+Then enable and start it:
+
+```bash
+systemctl --user enable --now cusp
+loginctl enable-linger $USER   # keep the service running after logout
+```
+
+#### System service
+
+If you'd rather run cusp as a dedicated service account, create `/etc/systemd/system/cusp.service`:
 
 ```ini
 [Unit]
@@ -167,6 +210,8 @@ RestartSec=10
 WantedBy=multi-user.target
 ```
 
+Point `ExecStart` at wherever `cusp` is actually installed for the `cusp` user — if you installed cusp with `pip install --user` or `uv tool install` as the `cusp` user, that path will be under its home directory, not `/usr/local/bin`. Installing system-wide (e.g. with `sudo pip install cusp-audio`) is the simplest way to get `/usr/local/bin/cusp`.
+
 Then enable and start it:
 
 ```bash
@@ -178,7 +223,7 @@ systemd sends `SIGTERM` on `systemctl stop`, which cusp handles gracefully — t
 
 ### Audio permissions
 
-The user running cusp must be in the `audio` group:
+The user running cusp must be in the `audio` group — whether that's your login user (for a `--user` service) or the dedicated `cusp` service account:
 
 ```bash
 sudo usermod -aG audio cusp
