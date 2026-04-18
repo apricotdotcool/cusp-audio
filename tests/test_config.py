@@ -1,5 +1,9 @@
 from pathlib import Path
+from unittest.mock import patch
 
+from click.testing import CliRunner
+
+from cusp.cli import main
 from cusp.config import CuspConfig, _find_config_file, load_config
 
 
@@ -26,7 +30,7 @@ class TestCuspConfigDefaults:
             sample_rate=44100,
             channels=1,
             blocksize=512,
-            airplay_target="Kitchen",
+            airplay_target=["Kitchen"],
             airplay_password="secret",
             auto_reconnect=False,
             reconnect_delay=10.0,
@@ -40,7 +44,7 @@ class TestCuspConfigDefaults:
         assert cfg.sample_rate == 44100
         assert cfg.channels == 1
         assert cfg.blocksize == 512
-        assert cfg.airplay_target == "Kitchen"
+        assert cfg.airplay_target == ["Kitchen"]
         assert cfg.airplay_password == "secret"
         assert cfg.auto_reconnect is False
         assert cfg.reconnect_delay == 10.0
@@ -68,7 +72,7 @@ class TestLoadConfig:
         assert cfg.sample_rate == 44100
         assert cfg.channels == 1
         assert cfg.blocksize == 512
-        assert cfg.airplay_target == "Living Room"
+        assert cfg.airplay_target == ["Living Room"]
         assert cfg.airplay_password == "pw"
         assert cfg.auto_reconnect is False
         assert cfg.reconnect_delay == 10.0
@@ -125,6 +129,54 @@ class TestLoadConfig:
         cfg = load_config(config_path=str(toml), sample_rate=None)
         assert cfg.sample_rate == 44100
 
+    def test_airplay_target_string_normalized_to_list(self, tmp_path):
+        toml = tmp_path / "cusp.toml"
+        toml.write_text('[airplay]\ntarget = "Living Room"\n')
+        cfg = load_config(config_path=str(toml))
+        assert cfg.airplay_target == ["Living Room"]
+
+    def test_airplay_target_string_comma_separated(self, tmp_path):
+        toml = tmp_path / "cusp.toml"
+        toml.write_text('[airplay]\ntarget = "Living Room, Kitchen, Office"\n')
+        cfg = load_config(config_path=str(toml))
+        assert cfg.airplay_target == ["Living Room", "Kitchen", "Office"]
+
+    def test_airplay_target_string_comma_separated_drops_empty_entries(self, tmp_path):
+        toml = tmp_path / "cusp.toml"
+        toml.write_text('[airplay]\ntarget = "Living Room,,  , Kitchen"\n')
+        cfg = load_config(config_path=str(toml))
+        assert cfg.airplay_target == ["Living Room", "Kitchen"]
+
+    def test_airplay_target_array(self, tmp_path):
+        toml = tmp_path / "cusp.toml"
+        toml.write_text('[airplay]\ntarget = ["Living Room", "Kitchen", "Office"]\n')
+        cfg = load_config(config_path=str(toml))
+        assert cfg.airplay_target == ["Living Room", "Kitchen", "Office"]
+
+    def test_airplay_target_array_strips_whitespace(self, tmp_path):
+        toml = tmp_path / "cusp.toml"
+        toml.write_text('[airplay]\ntarget = ["  Living Room ", "Kitchen"]\n')
+        cfg = load_config(config_path=str(toml))
+        assert cfg.airplay_target == ["Living Room", "Kitchen"]
+
+    def test_airplay_target_array_drops_empty_entries(self, tmp_path):
+        toml = tmp_path / "cusp.toml"
+        toml.write_text('[airplay]\ntarget = ["Living Room", "", "   "]\n')
+        cfg = load_config(config_path=str(toml))
+        assert cfg.airplay_target == ["Living Room"]
+
+    def test_airplay_target_empty_string_becomes_empty_list(self, tmp_path):
+        toml = tmp_path / "cusp.toml"
+        toml.write_text('[airplay]\ntarget = ""\n')
+        cfg = load_config(config_path=str(toml))
+        assert cfg.airplay_target == []
+
+    def test_airplay_target_cli_list_overrides_toml(self, tmp_path):
+        toml = tmp_path / "cusp.toml"
+        toml.write_text('[airplay]\ntarget = "Living Room"\n')
+        cfg = load_config(config_path=str(toml), airplay_target=["Kitchen", "Office"])
+        assert cfg.airplay_target == ["Kitchen", "Office"]
+
     def test_no_file_returns_defaults(self):
         cfg = load_config(config_path="/nonexistent/path.toml")
         assert cfg == CuspConfig()
@@ -164,3 +216,72 @@ class TestFindConfigFile:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
         assert _find_config_file() is None
+
+
+class TestStreamCLITargets:
+    """CLI parsing for `cusp stream -t …`. The stream pipeline is mocked."""
+
+    def _run(self, args, monkeypatch, tmp_path):
+        # Keep the CLI from finding a user/cwd config file.
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+        captured: dict = {}
+
+        async def fake_run_stream(config):
+            captured["config"] = config
+
+        with patch("cusp.cli._run_stream", fake_run_stream):
+            runner = CliRunner()
+            result = runner.invoke(main, ["stream", *args])
+        return result, captured
+
+    def test_cli_single_target(self, monkeypatch, tmp_path):
+        result, captured = self._run(["-t", "Living Room"], monkeypatch, tmp_path)
+        assert result.exit_code == 0
+        assert captured["config"].airplay_target == ["Living Room"]
+
+    def test_cli_comma_separated_targets(self, monkeypatch, tmp_path):
+        result, captured = self._run(
+            ["-t", "Living Room, Kitchen, Office"], monkeypatch, tmp_path
+        )
+        assert result.exit_code == 0
+        assert captured["config"].airplay_target == [
+            "Living Room",
+            "Kitchen",
+            "Office",
+        ]
+
+    def test_cli_comma_separated_drops_empty_entries(self, monkeypatch, tmp_path):
+        result, captured = self._run(
+            ["-t", "Living Room,,  , Kitchen"], monkeypatch, tmp_path
+        )
+        assert result.exit_code == 0
+        assert captured["config"].airplay_target == ["Living Room", "Kitchen"]
+
+    def test_cli_empty_target_rejected(self, monkeypatch, tmp_path):
+        result, captured = self._run(["-t", ""], monkeypatch, tmp_path)
+        assert result.exit_code == 1
+        assert "No AirPlay target specified" in result.output
+        assert "config" not in captured
+
+    def test_cli_whitespace_only_target_rejected(self, monkeypatch, tmp_path):
+        result, captured = self._run(["-t", "  ,  ,  "], monkeypatch, tmp_path)
+        assert result.exit_code == 1
+        assert "No AirPlay target specified" in result.output
+        assert "config" not in captured
+
+    def test_cli_target_overrides_toml(self, monkeypatch, tmp_path):
+        toml = tmp_path / "cusp.toml"
+        toml.write_text('[airplay]\ntarget = ["Living Room", "Kitchen"]\n')
+        result, captured = self._run(
+            ["-c", str(toml), "-t", "Office"], monkeypatch, tmp_path
+        )
+        assert result.exit_code == 0
+        assert captured["config"].airplay_target == ["Office"]
+
+    def test_cli_no_target_uses_toml_list(self, monkeypatch, tmp_path):
+        toml = tmp_path / "cusp.toml"
+        toml.write_text('[airplay]\ntarget = ["Living Room", "Kitchen"]\n')
+        result, captured = self._run(["-c", str(toml)], monkeypatch, tmp_path)
+        assert result.exit_code == 0
+        assert captured["config"].airplay_target == ["Living Room", "Kitchen"]
