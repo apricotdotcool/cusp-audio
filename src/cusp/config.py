@@ -18,8 +18,8 @@ class CuspConfig:
     channels: int | None = None
     blocksize: int = 1024
 
-    # AirPlay target
-    airplay_target: str | None = None
+    # AirPlay target(s). First entry is the group leader; remaining are followers.
+    airplay_target: list[str] | None = None
     airplay_password: str | None = None
 
     # Behavior
@@ -30,6 +30,20 @@ class CuspConfig:
     target_refresh_interval: float = 300.0
     log_level: str = "INFO"
     log_file: str | None = None
+
+
+def _normalize_targets(value: object) -> list[str]:
+    """Normalize a TOML `airplay.target` value (string or array) to a list."""
+    if isinstance(value, str):
+        items = [value]
+    elif isinstance(value, list):
+        items = [str(v) for v in value]
+    else:
+        raise TypeError(
+            "airplay.target must be a string or array of strings, "
+            f"got {type(value).__name__}"
+        )
+    return [s.strip() for s in items if s.strip()]
 
 
 def _find_config_file() -> Path | None:
@@ -68,7 +82,7 @@ def load_config(config_path: str | None = None, **cli_overrides: object) -> Cusp
         if "blocksize" in audio:
             data["blocksize"] = audio["blocksize"]
         if "target" in airplay:
-            data["airplay_target"] = airplay["target"]
+            data["airplay_target"] = _normalize_targets(airplay["target"])
         if "password" in airplay:
             data["airplay_password"] = airplay["password"]
         for key in (
