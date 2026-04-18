@@ -205,8 +205,7 @@ async def run_pipeline(config: CuspConfig) -> None:
     # One-time scan at startup; refreshed periodically while idle.
     targets: list[BaseConfig] = await resolve_targets(config)
     # Guards swaps of `targets` so a concurrent reader (session start) never
-    # sees a torn list during a background refresh. Group streaming in a
-    # later sub-issue will rely on this.
+    # sees a torn list during a background refresh.
     targets_lock = asyncio.Lock()
 
     capture = make_capture(config, loop)
