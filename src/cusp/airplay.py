@@ -90,10 +90,12 @@ async def resolve_target(config: CuspConfig) -> BaseConfig:
     """
     loop = asyncio.get_event_loop()
     devices = await pyatv.scan(loop, timeout=5)
-    target = _find_device(devices, config.airplay_target)
+    # Group streaming lands in a later sub-issue; for now use the leader.
+    target_name = config.airplay_target[0] if config.airplay_target else None
+    target = _find_device(devices, target_name)
     if target is None:
         raise ConnectionError(
-            f"AirPlay device '{config.airplay_target}' not found on network. "
+            f"AirPlay device '{target_name}' not found on network. "
             "Run `cusp devices` to see available receivers."
         )
 
