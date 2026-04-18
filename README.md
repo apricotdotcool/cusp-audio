@@ -166,6 +166,8 @@ Single-target usage is unchanged — `-t "Living Room"` or `target = "Living Roo
 
 **Graceful degradation.** If a follower can't be resolved on the network or its initial connection fails, cusp logs a warning and keeps streaming to whichever devices did connect. If a follower drops mid-stream, the same applies — the rest of the group keeps playing. The session only fails (and triggers `auto_reconnect`) when every device has dropped. You can leave an occasionally-offline speaker in the list without breaking playback for the rest of the house.
 
+**Sync drift.** Each receiver gets its own RAOP session — there is no shared timing anchor between them. Receivers in the same room will drift enough to be audible over time (on the order of tens of milliseconds within a few minutes). This is a known tradeoff of running an application-level fan-out instead of a true Apple-managed AirPlay 2 group. If you need tightly synced playback in a single room, group the speakers in the Home app and target the group leader's name from cusp instead.
+
 ## Running on a Raspberry Pi
 
 ### Systemd service
