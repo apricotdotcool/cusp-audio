@@ -253,6 +253,38 @@ class TestGroupStreamingSession:
         never_a.cancel()
         await session.stop()
 
+    async def test_feed_continues_when_leader_drops(self, connect_results, caplog):
+        # Leader (index 0) fails immediately; follower stays alive.
+        atv_leader = _mock_atv(AsyncMock(side_effect=ConnectionError("leader gone")))
+        never_follower = asyncio.get_event_loop().create_future()
+        atv_follower = _mock_atv(AsyncMock(side_effect=lambda _: never_follower))
+        connect_results([atv_leader, atv_follower])
+        config = CuspConfig(sample_rate=48000, channels=2)
+
+        session = await GroupStreamingSession.start(
+            [_mock_target("leader"), _mock_target("follower")], config
+        )
+        await asyncio.sleep(0.01)
+
+        assert session._sessions[0].failed()
+        assert not session._sessions[1].failed()
+        # Group as a whole is still alive because the follower is streaming.
+        assert not session.failed()
+        assert session.exception() is None
+
+        with caplog.at_level("WARNING", logger="cusp.pipeline"):
+            session.feed(b"\xde\xad" * 64)
+
+        drop_msgs = [r for r in caplog.records if "dropped" in r.message]
+        assert len(drop_msgs) == 1
+        assert "leader" in drop_msgs[0].message
+
+        reader_follower = atv_follower.stream.stream_file.call_args[0][0]
+        assert bytes(reader_follower._buffer).endswith(b"\xde\xad" * 64)
+
+        never_follower.cancel()
+        await session.stop()
+
     async def test_failed_only_when_all_sub_sessions_dead(self, connect_results):
         atv_a = _mock_atv(AsyncMock(side_effect=ConnectionError("A gone")))
         atv_b = _mock_atv(AsyncMock(side_effect=ConnectionError("B gone")))
