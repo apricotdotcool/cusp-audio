@@ -29,7 +29,8 @@ dependencies = [
 ]
 
 [project.urls]
-homepage = "https://github.com/apricotdotcool/cusp-audio"
+Homepage = "https://github.com/apricotdotcool/cusp-audio"
+Issues = "https://github.com/apricotdotcool/cusp-audio/issues"
 Changelog = "https://github.com/apricotdotcool/cusp-audio/blob/main/CHANGELOG.md"
 
 [project.scripts]
