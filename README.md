@@ -241,6 +241,8 @@ cusp captures PCM audio via PortAudio/sounddevice for hardware inputs or `parec`
 
 Expected latency is 2–3 seconds due to RAOP protocol buffering.
 
+See [ARCHITECTURE.md](ARCHITECTURE.md) for module-level details and how to extend cusp.
+
 ## Troubleshooting
 
 ### Choppy or skipped audio
