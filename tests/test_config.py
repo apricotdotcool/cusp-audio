@@ -135,6 +135,18 @@ class TestLoadConfig:
         cfg = load_config(config_path=str(toml))
         assert cfg.airplay_target == ["Living Room"]
 
+    def test_airplay_target_string_comma_separated(self, tmp_path):
+        toml = tmp_path / "cusp.toml"
+        toml.write_text('[airplay]\ntarget = "Living Room, Kitchen, Office"\n')
+        cfg = load_config(config_path=str(toml))
+        assert cfg.airplay_target == ["Living Room", "Kitchen", "Office"]
+
+    def test_airplay_target_string_comma_separated_drops_empty_entries(self, tmp_path):
+        toml = tmp_path / "cusp.toml"
+        toml.write_text('[airplay]\ntarget = "Living Room,,  , Kitchen"\n')
+        cfg = load_config(config_path=str(toml))
+        assert cfg.airplay_target == ["Living Room", "Kitchen"]
+
     def test_airplay_target_array(self, tmp_path):
         toml = tmp_path / "cusp.toml"
         toml.write_text('[airplay]\ntarget = ["Living Room", "Kitchen", "Office"]\n')

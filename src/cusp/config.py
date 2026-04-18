@@ -33,9 +33,13 @@ class CuspConfig:
 
 
 def _normalize_targets(value: object) -> list[str]:
-    """Normalize a TOML `airplay.target` value (string or array) to a list."""
+    """Normalize a TOML `airplay.target` value to a list.
+
+    Accepts a TOML array (`["A", "B"]`) or a string; strings are split on
+    commas to match the CLI `-t` form, so `"A, B"` yields `["A", "B"]`.
+    """
     if isinstance(value, str):
-        items = [value]
+        items = value.split(",")
     elif isinstance(value, list):
         items = [str(v) for v in value]
     else:
