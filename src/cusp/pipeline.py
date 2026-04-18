@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from cusp.airplay import connect_target, resolve_target
+from cusp.airplay import connect_target, resolve_targets
 from cusp.audio import make_capture
 
 if TYPE_CHECKING:
@@ -121,7 +121,11 @@ async def run_pipeline(config: CuspConfig) -> None:
     loop = asyncio.get_event_loop()
 
     # One-time scan at startup; refreshed periodically while idle.
-    target: BaseConfig = await resolve_target(config)
+    targets: list[BaseConfig] = await resolve_targets(config)
+    # Guards swaps of `targets` so a concurrent reader (session start) never
+    # sees a torn list during a background refresh. Group streaming in a
+    # later sub-issue will rely on this.
+    targets_lock = asyncio.Lock()
 
     capture = make_capture(config, loop)
     await capture.start()
@@ -148,17 +152,20 @@ async def run_pipeline(config: CuspConfig) -> None:
         loop.add_signal_handler(sig, _handle_signal, sig)
 
     async def refresh_target_loop() -> None:
-        """Periodically re-scan for the AirPlay target while idle."""
-        nonlocal target
+        """Periodically re-scan for AirPlay targets while idle."""
+        nonlocal targets
         while True:
             await asyncio.sleep(config.target_refresh_interval)
             if session is not None:
                 continue  # don't re-scan while a session is live
             try:
-                target = await resolve_target(config)
-                logger.debug("Refreshed AirPlay target")
+                new_targets = await resolve_targets(config)
             except ConnectionError as e:
                 logger.warning("Background target refresh failed: %s", e)
+                continue
+            async with targets_lock:
+                targets = new_targets
+            logger.debug("Refreshed AirPlay targets (%d)", len(new_targets))
 
     refresh_task = asyncio.create_task(refresh_target_loop())
 
@@ -189,13 +196,17 @@ async def run_pipeline(config: CuspConfig) -> None:
                 # seconds; pause the capture so the queue doesn't saturate
                 # and so we resume from real time, not from a backlog.
                 with capture.paused():
+                    async with targets_lock:
+                        leader = targets[0]
                     try:
-                        session = await StreamingSession.start(target, config)
+                        session = await StreamingSession.start(leader, config)
                     except ConnectionError:
                         # Cached target stale — re-resolve once and retry.
                         logger.info("Cached target stale, re-scanning")
-                        target = await resolve_target(config)
-                        session = await StreamingSession.start(target, config)
+                        new_targets = await resolve_targets(config)
+                        async with targets_lock:
+                            targets = new_targets
+                        session = await StreamingSession.start(new_targets[0], config)
                 continue  # discard the in-hand (now stale) chunk
 
             if session is not None:
