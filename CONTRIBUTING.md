@@ -2,6 +2,8 @@
 
 Thanks for your interest in cusp! This guide should be enough to get you from a fresh clone to a green test run.
 
+Before your first patch, skim [ARCHITECTURE.md](ARCHITECTURE.md) for a module map and overview of how capture, gating, and the AirPlay session fit together.
+
 ## Dev setup
 
 cusp depends on [PortAudio](http://www.portaudio.com/) at the system level. Install it first:
