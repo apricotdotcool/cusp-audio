@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -17,6 +18,71 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 CREDENTIALS_PATH = Path.home() / ".config" / "cusp" / "credentials.json"
+
+# AirPlay RAOP "sf" status flag bit names.
+# Source: https://openairplay.github.io/airplay-spec/status_flags.html
+STATUS_FLAGS: dict[int, str] = {
+    0: "ProblemDetected",
+    1: "DeviceNotConfigured",
+    2: "AudioCableAttached",
+    3: "PINRequired",
+    6: "SupportsAirPlayFromCloud",
+    7: "PasswordRequired",
+    9: "OneTimePairingRequired",
+    10: "DeviceWasSetupForHKAccessControl",
+    11: "DeviceSupportsRelay",
+    12: "SilentPrimary",
+    13: "TightSyncIsGroupLeader",
+    14: "TightSyncBuddyNotReachable",
+    15: "IsAppleMusicSubscriber",
+    16: "CloudLibraryIsOn",
+    17: "ReceiverSessionIsActive",
+}
+
+
+# Friendly names for known device model families. The key is the alphabetic
+# prefix of the "am" property (the part before the comma-separated version).
+MODEL_FAMILIES: dict[str, str] = {
+    "AppleTV": "Apple TV",
+    "AudioAccessory": "HomePod",
+    "iPad": "iPad",
+    "iPhone": "iPhone",
+    "iMac": "iMac",
+    "MacBookAir": "MacBook Air",
+    "MacBookPro": "MacBook Pro",
+    "Macmini": "Mac mini",
+    "MacPro": "Mac Pro",
+    "MacStudio": "Mac Studio",
+    "Mac": "Mac",
+}
+
+
+def friendly_model(model: str | None) -> str | None:
+    """Return a human-friendly name for an AirPlay "am" model string.
+
+    Falls back to the raw value for unknown model families (e.g. Sonos "One").
+    """
+    if not model:
+        return None
+    match = re.match(r"^[A-Za-z]+", model)
+    if not match:
+        return model
+    return MODEL_FAMILIES.get(match.group(0), model)
+
+
+def decode_status_flags(sf: str | int) -> list[tuple[int, str]]:
+    """Decode an AirPlay RAOP "sf" status flag value into set (bit, name) pairs.
+
+    Unknown bits are returned with name "Unknown".
+    """
+    value = int(sf, 16) if isinstance(sf, str) else sf
+    result = []
+    bit = 0
+    while value >> bit:
+        if value & (1 << bit):
+            result.append((bit, STATUS_FLAGS.get(bit, "Unknown")))
+        bit += 1
+    return result
 
 
 def _load_credentials() -> dict[str, dict[str, str]]:
@@ -37,15 +103,29 @@ async def discover_devices(timeout: float = 5.0) -> list[dict]:
     devices = await pyatv.scan(loop, timeout=timeout)
     results = []
     for dev in devices:
-        has_raop = any(s.protocol == Protocol.RAOP for s in dev.services)
-        if has_raop:
-            results.append(
-                {
-                    "name": dev.name,
-                    "identifier": dev.identifier,
-                    "address": str(dev.address),
-                }
-            )
+        raop = next((s for s in dev.services if s.protocol == Protocol.RAOP), None)
+        if raop is None:
+            continue
+        props = dict(raop.properties)
+        airplay = next(
+            (s for s in dev.services if s.protocol == Protocol.AirPlay), None
+        )
+        airplay_props = dict(airplay.properties) if airplay else {}
+        results.append(
+            {
+                "name": dev.name,
+                "identifier": dev.identifier,
+                "address": str(dev.address),
+                "port": raop.port,
+                "model": props.get("am"),
+                "firmware": props.get("vs"),
+                "gid": airplay_props.get("gid"),
+                "pgid": airplay_props.get("pgid"),
+                "gpn": airplay_props.get("gpn"),
+                "properties": props,
+                "airplay_properties": airplay_props,
+            }
+        )
     return results
 
 
