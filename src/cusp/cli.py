@@ -84,11 +84,16 @@ async def _list_devices(timeout: float, verbose: bool) -> None:
         if ft:
             click.echo(f"    features: {ft}")
 
-    groups: dict[str, list[str]] = {}
+    groups: dict[str, list[tuple[str, bool]]] = {}
     for r in receivers:
         gpn = r["gpn"]
         if gpn:
-            groups.setdefault(gpn, []).append(r["name"])
+            sf = r["properties"].get("sf")
+            is_leader = False
+            if sf:
+                sf_value = int(sf, 16) if isinstance(sf, str) else sf
+                is_leader = bool(sf_value & (1 << 13))
+            groups.setdefault(gpn, []).append((r["name"], is_leader))
 
     if groups:
         click.echo()
@@ -96,8 +101,9 @@ async def _list_devices(timeout: float, verbose: bool) -> None:
         click.echo("-" * 40)
         for gpn in sorted(groups, key=str.lower):
             click.echo(f"  {gpn}")
-            members = sorted(groups[gpn], key=str.lower)
-            click.echo(f"    {', '.join(members)}")
+            members = sorted(groups[gpn], key=lambda m: (not m[1], m[0].lower()))
+            formatted = [f"{name} ⭐" if leader else name for name, leader in members]
+            click.echo(f"    {', '.join(formatted)}")
 
 
 @main.command()

@@ -68,6 +68,8 @@ The `-d` flag accepts:
 
 The `-t` flag accepts an AirPlay receiver name.
 
+To stream to multiple devices at once, group them in Apple's Home app and pass the group name to `-t`. The group shows up in `cusp devices` like any other AirPlay receiver.
+
 ### Pair with a device
 
 Some AirPlay receivers require pairing before streaming:

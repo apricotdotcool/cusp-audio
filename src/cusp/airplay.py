@@ -204,7 +204,11 @@ async def connect_target(target: BaseConfig) -> AppleTV:
 
 
 def _find_device(devices, name: str):
-    """Find a device by name (substring match, case-insensitive)."""
+    """Find a device by name (case-insensitive exact match).
+
+    If no device matches, fall back to treating `name` as an AirPlay group
+    name (gpn) and return the group leader device.
+    """
     name_lower = name.lower()
     matches = [
         d
@@ -217,4 +221,31 @@ def _find_device(devices, name: str):
     if len(matches) > 1:
         names = ", ".join(d.name for d in matches)
         raise ValueError(f"Ambiguous target '{name}' matches: {names}")
+
+    leader = _find_group_leader(devices, name)
+    if leader is not None:
+        logger.info("Resolved group '%s' to leader %s", name, leader.name)
+        return leader
+    return None
+
+
+def _find_group_leader(devices, name: str):
+    """Find the leader of an AirPlay group with the given gpn name."""
+    name_lower = name.lower()
+    for d in devices:
+        raop = next((s for s in d.services if s.protocol == Protocol.RAOP), None)
+        airplay = next(
+            (s for s in d.services if s.protocol == Protocol.AirPlay), None
+        )
+        if raop is None or airplay is None:
+            continue
+        gpn = airplay.properties.get("gpn")
+        if not gpn or gpn.lower() != name_lower:
+            continue
+        sf = raop.properties.get("sf")
+        if not sf:
+            continue
+        sf_value = int(sf, 16) if isinstance(sf, str) else sf
+        if sf_value & (1 << 13):  # TightSyncIsGroupLeader
+            return d
     return None
