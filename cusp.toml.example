@@ -9,9 +9,17 @@ device = "USB Audio"
 blocksize = 1024
 
 [airplay]
-# AirPlay receiver name (substring match)
-# Run `cusp devices` to see available receivers
+# AirPlay receiver name (substring match).
+# Run `cusp devices` to see available receivers.
 target = "Living Room"
+# To stream to a group, pass a list of names; the first is the leader
+# and the rest are followers. If a follower can't be reached, it is
+# skipped with a warning and the stream continues to the survivors.
+# Note: each receiver gets its own RAOP session, so playback will drift
+# between them over time (audible within a few minutes in the same room).
+# For tightly synced playback, group the speakers in the Home app and
+# target the group leader's name here.
+# target = ["Living Room", "Kitchen", "Office"]
 # password = "secret"
 
 [behavior]

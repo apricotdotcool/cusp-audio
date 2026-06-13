@@ -70,7 +70,15 @@ async def _pair_device(name: str) -> None:
     default=None,
     help='Audio input device name, index, or "system" to capture system audio.',
 )
-@click.option("-t", "--target", default=None, help="AirPlay receiver name.")
+@click.option(
+    "-t",
+    "--target",
+    default=None,
+    help=(
+        "AirPlay receiver name. Pass a comma-separated list to stream to a "
+        "group (first name is the leader)."
+    ),
+)
 @click.option(
     "-c",
     "--config",
@@ -116,10 +124,15 @@ def stream(
         else:
             audio_device = device
 
+    # Split -t on commas into a group list; first entry is the leader.
+    airplay_target: list[str] | None = None
+    if target is not None:
+        airplay_target = [t.strip() for t in target.split(",") if t.strip()]
+
     config = load_config(
         config_path=config_path,
         audio_device=audio_device,
-        airplay_target=target,
+        airplay_target=airplay_target,
         sample_rate=sample_rate,
         channels=channels,
         blocksize=blocksize,

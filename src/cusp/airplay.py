@@ -82,36 +82,68 @@ async def pair_device(name: str) -> None:
     raise RuntimeError(f"No RAOP service found on {target.name}")
 
 
-async def resolve_target(config: CuspConfig) -> BaseConfig:
-    """Scan for the configured AirPlay target and apply credentials/password.
+def _apply_auth(target: BaseConfig, config: CuspConfig) -> None:
+    """Attach stored RAOP credentials and the configured password to a target."""
+    creds = _load_credentials()
+    stored = creds.get(str(target.identifier))
+    for service in target.services:
+        if service.protocol != Protocol.RAOP:
+            continue
+        if stored and "raop" in stored:
+            service.credentials = stored["raop"]
+        if config.airplay_password:
+            service.password = config.airplay_password
 
-    Returns a pyatv device config ready to be passed to `connect_target`.
-    Raises ConnectionError if the device is not found on the network.
+
+async def resolve_targets(config: CuspConfig) -> list[BaseConfig]:
+    """Resolve all configured AirPlay targets in a single network scan.
+
+    Returns the surviving devices in configured order — the first entry is the
+    group leader. Followers that are missing or ambiguous are logged and
+    skipped so one offline speaker cannot kill the session. An ambiguous
+    *leader* still fails hard (surfaces as ValueError from `_find_device`).
+
+    Raises ConnectionError with the list of missed names if zero devices
+    resolve.
     """
+    if not config.airplay_target:
+        raise ConnectionError("No AirPlay target configured")
+
     loop = asyncio.get_event_loop()
     devices = await pyatv.scan(loop, timeout=5)
-    target = _find_device(devices, config.airplay_target)
-    if target is None:
+
+    resolved: list[BaseConfig] = []
+    missed: list[str] = []
+    for index, name in enumerate(config.airplay_target):
+        is_leader = index == 0
+        try:
+            target = _find_device(devices, name)
+        except ValueError:
+            if is_leader:
+                raise
+            logger.warning("AirPlay follower '%s' ambiguous, skipping", name)
+            missed.append(name)
+            continue
+        if target is None:
+            role = "leader" if is_leader else "follower"
+            logger.warning("AirPlay %s '%s' not found, skipping", role, name)
+            missed.append(name)
+            continue
+        _apply_auth(target, config)
+        resolved.append(target)
+
+    if not resolved:
         raise ConnectionError(
-            f"AirPlay device '{config.airplay_target}' not found on network. "
+            f"No AirPlay devices found on network (tried: {', '.join(missed)}). "
             "Run `cusp devices` to see available receivers."
         )
 
-    # Apply stored credentials
-    creds = _load_credentials()
-    if str(target.identifier) in creds:
-        stored = creds[str(target.identifier)]
-        for service in target.services:
-            if service.protocol == Protocol.RAOP and "raop" in stored:
-                service.credentials = stored["raop"]
+    return resolved
 
-    # Apply password if configured
-    if config.airplay_password:
-        for service in target.services:
-            if service.protocol == Protocol.RAOP:
-                service.password = config.airplay_password
 
-    return target
+async def resolve_target(config: CuspConfig) -> BaseConfig:
+    """Resolve the configured leader. Thin wrapper over `resolve_targets`."""
+    return (await resolve_targets(config))[0]
 
 
 async def connect_target(target: BaseConfig) -> AppleTV:
