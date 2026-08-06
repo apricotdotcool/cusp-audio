@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from cusp.airplay import connect_target, resolve_target
+from cusp.airplay import connect_target, resolve_targets
 from cusp.audio import make_capture
 
 if TYPE_CHECKING:
@@ -52,9 +52,10 @@ def _wav_header(sample_rate: int, channels: int, bits_per_sample: int = 16) -> b
 class StreamingSession:
     """Owns one AirPlay connection + reader + consumer task."""
 
-    def __init__(self, atv: AppleTV, config: CuspConfig) -> None:
+    def __init__(self, atv: AppleTV, config: CuspConfig, name: str = "") -> None:
         self._atv = atv
         self._config = config
+        self.name = name
         self._reader = asyncio.StreamReader(limit=2**20)  # 1MB buffer
         # Write a WAV header so pyatv can identify the audio format immediately.
         # Raw PCM data follows directly — no MP3 encode/decode round-trip needed.
@@ -64,7 +65,7 @@ class StreamingSession:
     @classmethod
     async def start(cls, target: BaseConfig, config: CuspConfig) -> StreamingSession:
         atv = await connect_target(target)
-        return cls(atv, config)
+        return cls(atv, config, name=target.name)
 
     async def _consume(self) -> None:
         """Stream audio data to the AirPlay receiver via pyatv."""
@@ -84,17 +85,18 @@ class StreamingSession:
         return None
 
     async def stop(self) -> None:
-        logger.info("Disconnecting from AirPlay receiver")
+        label = self.name or "AirPlay receiver"
+        logger.info("Disconnecting from %s", label)
         self._reader.feed_eof()
         try:
             await asyncio.wait_for(self._consumer_task, timeout=5.0)
         except asyncio.TimeoutError:
-            logger.warning("Consumer task did not finish within 5s, cancelling")
+            logger.warning("Consumer task for %s did not finish within 5s", label)
             self._consumer_task.cancel()
             with contextlib.suppress(BaseException):
                 await self._consumer_task
         except Exception as e:
-            logger.warning("Consumer task finished with error: %s", e)
+            logger.warning("Consumer task for %s finished with error: %s", label, e)
         finally:
             # pyatv's close() returns a set of cleanup tasks (RAOP teardown,
             # zeroconf unregister, etc). They MUST be awaited or the receiver
@@ -107,8 +109,88 @@ class StreamingSession:
                         timeout=5.0,
                     )
                 except asyncio.TimeoutError:
-                    logger.warning("pyatv close did not finish within 5s")
-            logger.info("AirPlay receiver disconnected")
+                    logger.warning("pyatv close for %s did not finish within 5s", label)
+            logger.info("%s disconnected", label)
+
+
+class GroupStreamingSession:
+    """Fan out one capture stream to N AirPlay receivers.
+
+    Owns a list of independent `StreamingSession`s (one pyatv connection +
+    StreamReader + consumer task per receiver). A follower dropping mid-stream
+    logs a warning but does not affect siblings; the group as a whole only
+    surfaces failure once every sub-session has died, which lets the caller's
+    reconnect logic run on total loss.
+    """
+
+    def __init__(self, sessions: list[StreamingSession]) -> None:
+        self._sessions = sessions
+        self._logged_drops: set[int] = set()
+
+    @classmethod
+    async def start(
+        cls, targets: list[BaseConfig], config: CuspConfig
+    ) -> GroupStreamingSession:
+        """Connect all targets in parallel; keep whichever succeed."""
+        results = await asyncio.gather(
+            *(connect_target(t) for t in targets),
+            return_exceptions=True,
+        )
+        sessions: list[StreamingSession] = []
+        for target, result in zip(targets, results):
+            if isinstance(result, BaseException):
+                logger.warning(
+                    "Failed to connect to AirPlay target '%s': %s",
+                    target.name,
+                    result,
+                )
+                continue
+            sessions.append(StreamingSession(result, config, name=target.name))
+        if not sessions:
+            raise ConnectionError("Failed to connect to any configured AirPlay target")
+        logger.info(
+            "AirPlay group streaming to %d/%d device(s)", len(sessions), len(targets)
+        )
+        return cls(sessions)
+
+    def feed(self, pcm_chunk: bytes) -> None:
+        """Write `pcm_chunk` to every live sub-reader; skip any that have died."""
+        for session in self._sessions:
+            if session.failed():
+                key = id(session)
+                if key not in self._logged_drops:
+                    self._logged_drops.add(key)
+                    remaining = sum(1 for s in self._sessions if not s.failed())
+                    logger.warning(
+                        "AirPlay receiver '%s' dropped: %s; "
+                        "%d device(s) still streaming",
+                        session.name,
+                        session.exception(),
+                        remaining,
+                    )
+                continue
+            session.feed(pcm_chunk)
+
+    def failed(self) -> bool:
+        """True only when every sub-session has failed."""
+        return all(s.failed() for s in self._sessions)
+
+    def exception(self) -> BaseException | None:
+        """First sub-session exception — only returned when the whole group is dead."""
+        if not self.failed():
+            return None
+        for s in self._sessions:
+            exc = s.exception()
+            if exc is not None:
+                return exc
+        return None
+
+    async def stop(self) -> None:
+        """Tear down every sub-session in parallel."""
+        await asyncio.gather(
+            *(s.stop() for s in self._sessions),
+            return_exceptions=True,
+        )
 
 
 async def run_pipeline(config: CuspConfig) -> None:
@@ -121,12 +203,15 @@ async def run_pipeline(config: CuspConfig) -> None:
     loop = asyncio.get_event_loop()
 
     # One-time scan at startup; refreshed periodically while idle.
-    target: BaseConfig = await resolve_target(config)
+    targets: list[BaseConfig] = await resolve_targets(config)
+    # Guards swaps of `targets` so a concurrent reader (session start) never
+    # sees a torn list during a background refresh.
+    targets_lock = asyncio.Lock()
 
     capture = make_capture(config, loop)
     await capture.start()
 
-    session: StreamingSession | None = None
+    session: GroupStreamingSession | None = None
     last_activity: float | None = None
     threshold_sq = config.silence_threshold**2
 
@@ -148,17 +233,20 @@ async def run_pipeline(config: CuspConfig) -> None:
         loop.add_signal_handler(sig, _handle_signal, sig)
 
     async def refresh_target_loop() -> None:
-        """Periodically re-scan for the AirPlay target while idle."""
-        nonlocal target
+        """Periodically re-scan for AirPlay targets while idle."""
+        nonlocal targets
         while True:
             await asyncio.sleep(config.target_refresh_interval)
             if session is not None:
                 continue  # don't re-scan while a session is live
             try:
-                target = await resolve_target(config)
-                logger.debug("Refreshed AirPlay target")
+                new_targets = await resolve_targets(config)
             except ConnectionError as e:
                 logger.warning("Background target refresh failed: %s", e)
+                continue
+            async with targets_lock:
+                targets = new_targets
+            logger.debug("Refreshed AirPlay targets (%d)", len(new_targets))
 
     refresh_task = asyncio.create_task(refresh_target_loop())
 
@@ -189,13 +277,19 @@ async def run_pipeline(config: CuspConfig) -> None:
                 # seconds; pause the capture so the queue doesn't saturate
                 # and so we resume from real time, not from a backlog.
                 with capture.paused():
+                    async with targets_lock:
+                        current_targets = list(targets)
                     try:
-                        session = await StreamingSession.start(target, config)
+                        session = await GroupStreamingSession.start(
+                            current_targets, config
+                        )
                     except ConnectionError:
-                        # Cached target stale — re-resolve once and retry.
-                        logger.info("Cached target stale, re-scanning")
-                        target = await resolve_target(config)
-                        session = await StreamingSession.start(target, config)
+                        # Cached targets stale — re-resolve once and retry.
+                        logger.info("Cached targets stale, re-scanning")
+                        new_targets = await resolve_targets(config)
+                        async with targets_lock:
+                            targets = new_targets
+                        session = await GroupStreamingSession.start(new_targets, config)
                 continue  # discard the in-hand (now stale) chunk
 
             if session is not None:

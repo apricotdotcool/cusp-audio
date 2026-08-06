@@ -58,6 +58,9 @@ cusp stream -d "USB Audio" -t "Living Room"
 # From the system audio output on Linux (see "System audio" below)
 cusp stream -d system -t "Living Room"
 
+# Stream to an AirPlay 2 group (see "AirPlay 2 groups" below)
+cusp stream -d "USB Audio" -t "Living Room,Kitchen,Office"
+
 # Or use a config file
 cusp stream --config cusp.toml
 ```
@@ -66,7 +69,7 @@ The `-d` flag accepts:
 - a device name (substring match) or index number from `cusp devices`
 - the literal `system` to capture system audio output (Linux only)
 
-The `-t` flag accepts an AirPlay receiver name.
+The `-t` flag accepts an AirPlay receiver name, or a comma-separated list for a group.
 
 ### Pair with a device
 
@@ -143,6 +146,27 @@ log_level = "INFO"
 ```
 
 Config file search order: `--config` flag, then `./cusp.toml`, then `~/.config/cusp/cusp.toml`. Command line arguments override config file values.
+
+## AirPlay 2 groups
+
+cusp can fan a single capture out to multiple AirPlay receivers at once. Pass a comma-separated list on the CLI, or a TOML array in the config:
+
+```bash
+cusp stream -d "USB Audio" -t "Living Room,Kitchen,Office"
+```
+
+```toml
+[airplay]
+target = ["Living Room", "Kitchen", "Office"]
+```
+
+Single-target usage is unchanged — `-t "Living Room"` or `target = "Living Room"` still works and connects to one device.
+
+**Leader semantics.** The first name in the list is the group leader; the rest are followers. The leader is what cusp retries against if no device can be reached at startup, and its name is used for logging and for looking up stored pairing credentials.
+
+**Graceful degradation.** If a follower can't be resolved on the network or its initial connection fails, cusp logs a warning and keeps streaming to whichever devices did connect. If a follower drops mid-stream, the same applies — the rest of the group keeps playing. The session only fails (and triggers `auto_reconnect`) when every device has dropped. You can leave an occasionally-offline speaker in the list without breaking playback for the rest of the house.
+
+**Sync drift.** Each receiver gets its own RAOP session — there is no shared timing anchor between them. Receivers in the same room will drift enough to be audible over time (on the order of tens of milliseconds within a few minutes). This is a known tradeoff of running an application-level fan-out instead of a true Apple-managed AirPlay 2 group. If you need tightly synced playback in a single room, group the speakers in the Home app and target the group leader's name from cusp instead.
 
 ## Running on a Raspberry Pi
 
