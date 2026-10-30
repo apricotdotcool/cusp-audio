@@ -33,7 +33,14 @@ jobs:
       - uses: actions/checkout@v6.0.2
       - name: Install portaudio (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt install libportaudio2
+        # PortAudio 19.7+ (ubuntu-latest >= 26.04) is built with the PulseAudio
+        # host API, and Pa_Initialize() fails outright when no sound server is
+        # reachable. Start a headless PulseAudio with a null sink so that
+        # `import sounddevice` succeeds on the runner.
+        run: |
+          sudo apt-get install -y libportaudio2 pulseaudio
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=dummy
       - name: Install portaudio (macOS)
         if: runner.os == 'macOS'
         run: brew install portaudio
